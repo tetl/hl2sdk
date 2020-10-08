@@ -14,6 +14,7 @@
 
 #include "tier0/platform.h"
 #include "tier0/basetypes.h"
+#include <tier1/strtools.h>
 #include "dbgflag.h"
 #include "logging.h"
 #include <math.h>
@@ -82,8 +83,6 @@ class Color;
 //	 DebuggerBreak();
 //-----------------------------------------------------------------------------
 
-PLATFORM_INTERFACE void _ExitOnFatalAssert( const tchar* pFile, int line );
-
 PLATFORM_INTERFACE bool SetupWin32ConsoleIO();
 
 // Returns true if they want to break in the debugger.
@@ -96,11 +95,6 @@ PLATFORM_INTERFACE bool SetupWin32ConsoleIO();
 		{ 																\
 			LoggingResponse_t ret = Log_Assert( "%s (%d) : %s\n", __TFILE__, __LINE__, _msg );	\
 			_executeExp; 												\
-			if ( ret == LR_DEBUGGER )									\
-			{															\
-				if ( _bFatal )											\
-					_ExitOnFatalAssert( __TFILE__, __LINE__ );			\
-			}															\
 		}																\
 	} while (0)
 
@@ -238,28 +232,28 @@ PLATFORM_INTERFACE bool SetupWin32ConsoleIO();
 // Legacy Logging System
 //////////////////////////////////////////////////////////////////////////
 
-// Channels which map the legacy logging system to the new system.
+// Channels which map the legacy logging system to the new system. Only LOG_GENERAL exists as shared in Source 2
 
 // Channel for all default Msg/Warning/Error commands.
-DECLARE_LOGGING_CHANNEL( LOG_GENERAL );
-// Channel for all asserts.
-DECLARE_LOGGING_CHANNEL( LOG_ASSERT );
-// Channel for all ConMsg and ConColorMsg commands.
-DECLARE_LOGGING_CHANNEL( LOG_CONSOLE );
-// Channel for all DevMsg and DevWarning commands with level < 2.
-DECLARE_LOGGING_CHANNEL( LOG_DEVELOPER );
-// Channel for ConDMsg commands.
-DECLARE_LOGGING_CHANNEL( LOG_DEVELOPER_CONSOLE );
-// Channel for all DevMsg and DevWarning commands with level >= 2.
-DECLARE_LOGGING_CHANNEL( LOG_DEVELOPER_VERBOSE );
+PLATFORM_INTERFACE LoggingChannelID_t LOG_GENERAL;
 
 // Legacy logging functions
 
 PLATFORM_INTERFACE void Msg( const tchar* pMsg, ... );
 PLATFORM_INTERFACE void Warning( const tchar *pMsg, ... ) FMTFUNCTION( 1, 2 );
 PLATFORM_INTERFACE void Warning_SpewCallStack( int iMaxCallStackLength, const tchar *pMsg, ... ) FMTFUNCTION( 2, 3 );
-PLATFORM_INTERFACE void Error( const tchar *pMsg, ... ) FMTFUNCTION( 1, 2 );
-PLATFORM_INTERFACE void Error_SpewCallStack( int iMaxCallStackLength, const tchar *pMsg, ... ) FMTFUNCTION( 2, 3 );
+
+// This is gone in Source2. Provide helper to roughly mimic Source1 behavior
+void Error( const tchar* pMsg, ... ) FMTFUNCTION( 1, 2 );
+inline void Error( const tchar* pMsg, ... )
+{
+	static char szBuffer[MAX_LOGGING_MESSAGE_LENGTH];
+	va_list params;
+	va_start(params, pMsg);
+	V_vsnprintf(szBuffer, sizeof(szBuffer), pMsg, params);
+	va_end(params);
+	LoggingSystem_LogDirect(LOG_GENERAL, LS_ERROR, szBuffer);
+}
 
 // @TODO: these callstack spew functions are currently disabled in the new logging system.  Need to add support for these if desired.
 PLATFORM_INTERFACE void _Warning_AlwaysSpewCallStack_Enable( bool bEnable );

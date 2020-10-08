@@ -1,3 +1,4 @@
+
 //===== Copyright © 1996-2005, Valve Corporation, All rights reserved. ======//
 //
 // Purpose: 
@@ -36,7 +37,7 @@
 //-----------------------------------------------------------------------------
 ConCommandBase			*ConCommandBase::s_pConCommandBases = NULL;
 IConCommandBaseAccessor	*ConCommandBase::s_pAccessor = NULL;
-static int s_nCVarFlag = 0;
+static int64 s_nCVarFlag = 0;
 static int s_nDLLIdentifier = -1;	// A unique identifier indicating which DLL this convar came from
 static bool s_bRegistered = false;
 
@@ -56,7 +57,7 @@ static CDefaultAccessor s_DefaultAccessor;
 //-----------------------------------------------------------------------------
 // Called by the framework to register ConCommandBases with the ICVar
 //-----------------------------------------------------------------------------
-void ConVar_Register( int nCVarFlag, IConCommandBaseAccessor *pAccessor )
+void ConVar_Register( int64 nCVarFlag, IConCommandBaseAccessor *pAccessor )
 {
 	if ( !g_pCVar || s_bRegistered )
 		return;
@@ -112,7 +113,7 @@ ConCommandBase::ConCommandBase( void )
 //			*pHelpString - help text
 //			flags - flags
 //-----------------------------------------------------------------------------
-ConCommandBase::ConCommandBase( const char *pName, const char *pHelpString /*=0*/, int flags /*= 0*/ )
+ConCommandBase::ConCommandBase( const char *pName, const char *pHelpString /*=0*/, int64 flags /*= 0*/ )
 {
 	Create( pName, pHelpString, flags );
 }
@@ -151,7 +152,7 @@ CVarDLLIdentifier_t ConCommandBase::GetDLLIdentifier() const
 //			*pHelpString - 
 //			flags - 
 //-----------------------------------------------------------------------------
-void ConCommandBase::Create( const char *pName, const char *pHelpString /*= 0*/, int flags /*= 0*/ )
+void ConCommandBase::Create( const char *pName, const char *pHelpString /*= 0*/, int64 flags /*= 0*/ )
 {
 	static const char *empty_string = "";
 
@@ -223,7 +224,7 @@ const char *ConCommandBase::GetName( void ) const
 // Input  : flag - 
 // Output : Returns true on success, false on failure.
 //-----------------------------------------------------------------------------
-bool ConCommandBase::IsFlagSet( int flag ) const
+bool ConCommandBase::IsFlagSet( int64 flag ) const
 {
 	return ( flag & m_nFlags ) ? true : false;
 }
@@ -232,7 +233,7 @@ bool ConCommandBase::IsFlagSet( int flag ) const
 // Purpose: 
 // Input  : flags - 
 //-----------------------------------------------------------------------------
-void ConCommandBase::AddFlags( int flags )
+void ConCommandBase::AddFlags( int64 flags )
 {
 	m_nFlags |= flags;
 
@@ -241,12 +242,12 @@ void ConCommandBase::AddFlags( int flags )
 #endif
 }
 
-void ConCommandBase::RemoveFlags( int flags )
+void ConCommandBase::RemoveFlags( int64 flags )
 {
 	m_nFlags &= ~flags;
 }
 
-int ConCommandBase::GetFlags( void ) const
+int64 ConCommandBase::GetFlags( void ) const
 {
 	return m_nFlags;
 }
@@ -309,6 +310,10 @@ bool ConCommandBase::IsRegistered( void ) const
 	return m_bRegistered;
 }
 
+bool ConCommandBase::IsBoundedVar(void) const
+{
+	return false;
+}
 
 //-----------------------------------------------------------------------------
 //
@@ -501,71 +506,103 @@ int CCommand::FindArgInt( const char *pName, int nDefaultVal ) const
 //-----------------------------------------------------------------------------
 // Default console command autocompletion function 
 //-----------------------------------------------------------------------------
-int DefaultCompletionFunc( const char *partial, char commands[ COMMAND_COMPLETION_MAXITEMS ][ COMMAND_COMPLETION_ITEM_LENGTH ] )
+int DefaultCompletionFunc( const char *partial, CUtlVector< CUtlString > &commands )
 {
 	return 0;
 }
 
 
-//-----------------------------------------------------------------------------
-// Purpose: Constructs a console command
-//-----------------------------------------------------------------------------
-//ConCommand::ConCommand()
-//{
-//	m_bIsNewConCommand = true;
-//}
-
-ConCommand::ConCommand( const char *pName, FnCommandCallbackV1_t callback, const char *pHelpString /*= 0*/, int flags /*= 0*/, FnCommandCompletionCallback completionFunc /*= 0*/ )
+ConCommand::ConCommand( const char *pName, FnCommandCallback_t callback, const char *pHelpString /*= 0*/, int64 flags /*= 0*/, FnCommandCompletionCallback completionFunc /*= 0*/ )
 {
-	// Set the callback
-	m_fnCommandCallbackV1 = callback;
-	m_bUsingOldCommandCallback = true;
-	m_bUsingCommandCallbackInterface = false;
-	m_bUsingCommandCallbackInterface2 = false;
+	// Add the callback
+	if (callback)
+	{
+		ConCommandCB cb;
+		cb.m_fnCommandCallback = callback;
+		cb.m_bUsingOldCommandCallback = true;
+		cb.m_bUsingV1CommandCallback = false;
+		cb.m_bUsingV2CommandCallback = false;		
+		cb.m_bUsingCommandCallbackInterface = false;
+		m_Callbacks.AddToTail(cb);
+	}
+
 	m_fnCompletionCallback = completionFunc ? completionFunc : DefaultCompletionFunc;
 	m_bHasCompletionCallback = completionFunc != 0 ? true : false;
+	m_bUsingCommandCompletionInterface = false;
+
+	m_pParent = this;
 
 	// Setup the rest
 	BaseClass::Create( pName, pHelpString, flags );
 }
 
-ConCommand::ConCommand( const char *pName, FnCommandCallback_t callback, const char *pHelpString /*= 0*/, int flags /*= 0*/, FnCommandCompletionCallback completionFunc /*= 0*/ )
+ConCommand::ConCommand(const char *pName, FnCommandCallbackV1_t callback, const char *pHelpString /*= 0*/, int64 flags /*= 0*/, FnCommandCompletionCallback completionFunc /*= 0*/)
 {
-	// Set the callback
-	m_fnCommandCallback = callback;
-	m_bUsingOldCommandCallback = false;
+	// Add the callback
+	if (callback)
+	{
+		ConCommandCB cb;
+		cb.m_fnCommandCallbackV1 = callback;
+		cb.m_bUsingOldCommandCallback = false;
+		cb.m_bUsingV1CommandCallback = true;
+		cb.m_bUsingV2CommandCallback = false;
+		cb.m_bUsingCommandCallbackInterface = false;
+		m_Callbacks.AddToTail(cb);
+	}
+
 	m_fnCompletionCallback = completionFunc ? completionFunc : DefaultCompletionFunc;
 	m_bHasCompletionCallback = completionFunc != 0 ? true : false;
-	m_bUsingCommandCallbackInterface = false;
-	m_bUsingCommandCallbackInterface2 = false;
+	m_bUsingCommandCompletionInterface = false;
+
+	m_pParent = this;
 
 	// Setup the rest
-	BaseClass::Create( pName, pHelpString, flags );
+	BaseClass::Create(pName, pHelpString, flags);
 }
 
-ConCommand::ConCommand( const char *pName, ICommandCallback *pCallback, const char *pHelpString /*= 0*/, int flags /*= 0*/, ICommandCompletionCallback *pCompletionCallback /*= 0*/ )
+ConCommand::ConCommand(const char *pName, FnCommandCallbackV2_t callback, const char *pHelpString /*= 0*/, int64 flags /*= 0*/, FnCommandCompletionCallback completionFunc /*= 0*/)
 {
-	// Set the callback
-	m_pCommandCallback = pCallback;
-	m_bUsingOldCommandCallback = false;
-	m_pCommandCompletionCallback = pCompletionCallback;
-	m_bHasCompletionCallback = ( pCompletionCallback != 0 );
-	m_bUsingCommandCallbackInterface = true;
-	m_bUsingCommandCallbackInterface2 = false;
+	// Add the callback
+	if (callback)
+	{
+		ConCommandCB cb;
+		cb.m_fnCommandCallbackV2 = callback;
+		cb.m_bUsingOldCommandCallback = false;
+		cb.m_bUsingV1CommandCallback = false;
+		cb.m_bUsingV2CommandCallback = true;
+		cb.m_bUsingCommandCallbackInterface = false;
+		m_Callbacks.AddToTail(cb);
+	}
+
+	m_fnCompletionCallback = completionFunc ? completionFunc : DefaultCompletionFunc;
+	m_bHasCompletionCallback = completionFunc != 0 ? true : false;
+	m_bUsingCommandCompletionInterface = false;
+
+	m_pParent = this;
 
 	// Setup the rest
-	BaseClass::Create( pName, pHelpString, flags );
+	BaseClass::Create(pName, pHelpString, flags);
 }
 
-ConCommand::ConCommand( const char *pName, ICommandCallback2 *pCallback, const char *pHelpString /*= 0*/, int flags /*= 0*/, ICommandCompletionCallback *pCompletionCallback /*= 0*/ )
+ConCommand::ConCommand( const char *pName, ICommandCallback *pCallback, const char *pHelpString /*= 0*/, int64 flags /*= 0*/, ICommandCompletionCallback *pCompletionCallback /*= 0*/ )
 {
-	// Set the callback
-	m_pCommandCallback2 = pCallback;
-	m_bUsingOldCommandCallback = false;
+	// Add the callback iface
+	if (pCallback)
+	{
+		ConCommandCB cb;
+		cb.m_pCommandCallback = pCallback;
+		cb.m_bUsingOldCommandCallback = false;
+		cb.m_bUsingV1CommandCallback = false;
+		cb.m_bUsingV2CommandCallback = false;
+		cb.m_bUsingCommandCallbackInterface = true;
+		m_Callbacks.AddToTail(cb);
+	}
+
 	m_pCommandCompletionCallback = pCompletionCallback;
 	m_bHasCompletionCallback = ( pCompletionCallback != 0 );
-	m_bUsingCommandCallbackInterface = false;
-	m_bUsingCommandCallbackInterface2 = true;
+	m_bUsingCommandCompletionInterface = true;
+
+	m_pParent = this;
 
 	// Setup the rest
 	BaseClass::Create( pName, pHelpString, flags );
@@ -593,41 +630,35 @@ bool ConCommand::IsCommand( void ) const
 //-----------------------------------------------------------------------------
 void ConCommand::Dispatch( const CCommandContext &context, const CCommand &command )
 {
-	if ( m_bUsingOldCommandCallback )
+	FOR_EACH_VEC(m_Callbacks, i)
 	{
-		if ( m_fnCommandCallbackV1 )
+		ConCommandCB cb = m_Callbacks[i];
+		if (cb.m_fnCallbackAny)
 		{
-			( *m_fnCommandCallbackV1 )();
-			return;
+			if (cb.m_bUsingOldCommandCallback)
+			{
+				(*cb.m_fnCommandCallback)(command);
+				return;
+			}
+			else if (cb.m_bUsingCommandCallbackInterface)
+			{
+				cb.m_pCommandCallback->CommandCallback(context, command);
+				return;
+			}
+			else if (cb.m_bUsingV1CommandCallback)
+			{
+				(*cb.m_fnCommandCallbackV1)(context);
+				return;
+			}
+			else if (cb.m_bUsingV2CommandCallback)
+			{
+				cb.m_fnCommandCallbackV2(context, command);
+			}
 		}
-	}
-	else if ( m_bUsingCommandCallbackInterface )
-	{
-		if ( m_pCommandCallback )
-		{
-			m_pCommandCallback->CommandCallback( command );
-			return;
-		}
-	}
-	else if (m_bUsingCommandCallbackInterface2 )
-	{
-		if ( m_pCommandCallback2 )
-		{
-			m_pCommandCallback2->CommandCallback( context, command );
-			return;
-		}
-	}
-	else
-	{
-		if ( m_fnCommandCallback )
-		{
-			( *m_fnCommandCallback )( context, command );
-			return;
-		}            
-	}
 
-	// Command without callback!!!
-	AssertMsg( 0, ( "Encountered ConCommand without a callback!\n" ) );
+		// Command without callback!!!
+		AssertMsg(0, ("Encountered ConCommand without a callback!\n"));
+	}
 }
 
 
@@ -636,7 +667,7 @@ void ConCommand::Dispatch( const CCommandContext &context, const CCommand &comma
 //-----------------------------------------------------------------------------
 int	ConCommand::AutoCompleteSuggest( const char *partial, CUtlVector< CUtlString > &commands )
 {
-	if ( m_bUsingCommandCallbackInterface )
+	if (m_bUsingCommandCompletionInterface)
 	{
 		if ( !m_pCommandCompletionCallback )
 			return 0;
@@ -647,14 +678,7 @@ int	ConCommand::AutoCompleteSuggest( const char *partial, CUtlVector< CUtlString
 	if ( !m_fnCompletionCallback )
 		return 0;
 
-	char rgpchCommands[ COMMAND_COMPLETION_MAXITEMS ][ COMMAND_COMPLETION_ITEM_LENGTH ];
-	int iret = ( m_fnCompletionCallback )( partial, rgpchCommands );
-	for ( int i = 0 ; i < iret; ++i )
-	{
-		CUtlString str = rgpchCommands[ i ];
-		commands.AddToTail( str );
-	}
-	return iret;
+	return m_fnCompletionCallback( partial, commands );
 }
 
 
@@ -677,27 +701,27 @@ bool ConCommand::CanAutoComplete( void )
 //-----------------------------------------------------------------------------
 // Various constructors
 //-----------------------------------------------------------------------------
-ConVar::ConVar( const char *pName, const char *pDefaultValue, int flags /* = 0 */ )
+ConVar::ConVar( const char *pName, const char *pDefaultValue, int64 flags /* = 0 */ )
 {
 	Create( pName, pDefaultValue, flags );
 }
 
-ConVar::ConVar( const char *pName, const char *pDefaultValue, int flags, const char *pHelpString )
+ConVar::ConVar( const char *pName, const char *pDefaultValue, int64 flags, const char *pHelpString )
 {
 	Create( pName, pDefaultValue, flags, pHelpString );
 }
 
-ConVar::ConVar( const char *pName, const char *pDefaultValue, int flags, const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax )
+ConVar::ConVar( const char *pName, const char *pDefaultValue, int64 flags, const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax )
 {
 	Create( pName, pDefaultValue, flags, pHelpString, bMin, fMin, bMax, fMax );
 }
 
-ConVar::ConVar( const char *pName, const char *pDefaultValue, int flags, const char *pHelpString, FnChangeCallback_t callback )
+ConVar::ConVar( const char *pName, const char *pDefaultValue, int64 flags, const char *pHelpString, FnChangeCallback_t callback )
 {
 	Create( pName, pDefaultValue, flags, pHelpString, false, 0.0, false, 0.0, callback );
 }
 
-ConVar::ConVar( const char *pName, const char *pDefaultValue, int flags, const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax, FnChangeCallback_t callback )
+ConVar::ConVar( const char *pName, const char *pDefaultValue, int64 flags, const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax, FnChangeCallback_t callback )
 {
 	Create( pName, pDefaultValue, flags, pHelpString, bMin, fMin, bMax, fMax, callback );
 }
@@ -740,7 +764,7 @@ void ConVar::InstallChangeCallback( FnChangeCallback_t callback, bool bInvoke )
 	}
 }
 
-bool ConVar::IsFlagSet( int flag ) const
+bool ConVar::IsFlagSet( int64 flag ) const
 {
 	return ( flag & m_pParent->m_nFlags ) ? true : false;
 }
@@ -750,7 +774,7 @@ const char *ConVar::GetHelpText( void ) const
 	return m_pParent->m_pszHelpString;
 }
 
-void ConVar::AddFlags( int flags )
+void ConVar::AddFlags( int64 flags )
 {
 	m_pParent->m_nFlags |= flags;
 
@@ -759,7 +783,7 @@ void ConVar::AddFlags( int flags )
 #endif
 }
 
-int ConVar::GetFlags( void ) const
+int64 ConVar::GetFlags( void ) const
 {
 	return m_pParent->m_nFlags;
 }
@@ -968,10 +992,25 @@ void ConVar::InternalSetColorValue( Color cValue )
 	InternalSetIntValue( color );
 }
 
+bool ConVar::GetBoolVirtualized() const
+{
+	return m_Value.m_nValue != 0;
+}
+
+int ConVar::GetIntVirtualized() const
+{
+	return m_Value.m_nValue;
+}
+
+float ConVar::GetFloatVirtualized() const
+{
+	return m_Value.m_fValue;
+}
+
 //-----------------------------------------------------------------------------
 // Purpose: Private creation
 //-----------------------------------------------------------------------------
-void ConVar::Create( const char *pName, const char *pDefaultValue, int flags /*= 0*/,
+void ConVar::Create( const char *pName, const char *pDefaultValue, int64 flags /*= 0*/,
 	const char *pHelpString /*= NULL*/, bool bMin /*= false*/, float fMin /*= 0.0*/,
 	bool bMax /*= false*/, float fMax /*= false*/, FnChangeCallback_t callback /*= NULL*/ )
 {

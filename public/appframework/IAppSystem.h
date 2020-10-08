@@ -13,7 +13,6 @@
 #pragma once
 #endif
 
-#include "tier1/interface.h"
 #include "interfaces/interfaces.h"
 
 
@@ -52,6 +51,11 @@ enum AppSystemTier_t
 	APP_SYSTEM_TIER_OTHER,
 };
 
+enum BuildType_t
+{
+	kBuildTypeRelease = 2
+};
+
 
 abstract_class IAppSystem
 {
@@ -67,6 +71,7 @@ public:
 	// Init, shutdown
 	virtual InitReturnVal_t Init() = 0;
 	virtual void Shutdown() = 0;
+	virtual void PreShutdown() = 0;
 
 	// Returns all dependent libraries
 	virtual const AppSystemInfo_t* GetDependencies() = 0;
@@ -79,6 +84,8 @@ public:
 
 	// Returns whether or not the app system is a singleton
 	virtual bool IsSingleton() = 0;
+	
+	virtual BuildType_t	GetBuildType() = 0;
 };
 
 

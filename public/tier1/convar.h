@@ -91,16 +91,14 @@ void ConVar_PublishToVXConsole();
 //-----------------------------------------------------------------------------
 // Called when a ConCommand needs to execute
 //-----------------------------------------------------------------------------
-typedef void ( *FnCommandCallbackV1_t )( void );
-typedef void ( *FnCommandCallback_t )( const CCommandContext &context, const CCommand &command );
-
-#define COMMAND_COMPLETION_MAXITEMS		64
-#define COMMAND_COMPLETION_ITEM_LENGTH	64
+typedef void ( *FnCommandCallbackV1_t )( const CCommandContext &context );
+typedef void ( *FnCommandCallbackV2_t )( const CCommandContext &context, const CCommand &command );
+typedef void ( *FnCommandCallback_t )( const CCommand &command );
 
 //-----------------------------------------------------------------------------
 // Returns 0 to COMMAND_COMPLETION_MAXITEMS worth of completion strings
 //-----------------------------------------------------------------------------
-typedef int  ( *FnCommandCompletionCallback )( const char *partial, char commands[ COMMAND_COMPLETION_MAXITEMS ][ COMMAND_COMPLETION_ITEM_LENGTH ] );
+typedef int(*FnCommandCompletionCallback)( const char *partial, CUtlVector< CUtlString > &commands );
 
 
 //-----------------------------------------------------------------------------
@@ -109,13 +107,7 @@ typedef int  ( *FnCommandCompletionCallback )( const char *partial, char command
 class ICommandCallback
 {
 public:
-	virtual void CommandCallback( const CCommand &command ) = 0;
-};
-
-class ICommandCallback2
-{
-public:
-	virtual void CommandCallback( const CCommandContext &context, const CCommand &command ) = 0;
+	virtual void CommandCallback(const CCommandContext &context, const CCommand &command) = 0;
 };
 
 class ICommandCompletionCallback
@@ -132,7 +124,7 @@ class ConCommandBase
 	friend class CCvar;
 	friend class ConVar;
 	friend class ConCommand;
-	friend void ConVar_Register( int nCVarFlag, IConCommandBaseAccessor *pAccessor );
+	friend void ConVar_Register( int64 nCVarFlag, IConCommandBaseAccessor *pAccessor );
 	friend void ConVar_PublishToVXConsole();
 
 	// FIXME: Remove when ConVar changes are done
@@ -141,20 +133,22 @@ class ConCommandBase
 public:
 								ConCommandBase( void );
 								ConCommandBase( const char *pName, const char *pHelpString = 0, 
-									int flags = 0 );
+									int64 flags = 0 );
 
 	virtual						~ConCommandBase( void );
 
 	virtual	bool				IsCommand( void ) const;
+	
+	virtual bool				IsBoundedVar( void ) const;
 
 	// Check flag
-	virtual bool				IsFlagSet( int flag ) const;
+	virtual bool				IsFlagSet( int64 flag ) const;
 	// Set flag
-	virtual void				AddFlags( int flags );
+	virtual void				AddFlags( int64 flags );
 	// Clear flag
-	virtual void				RemoveFlags( int flags );
+	virtual void				RemoveFlags( int64 flags );
 
-	virtual int					GetFlags() const;
+	virtual int64				GetFlags() const;
 
 	// Return name of cvar
 	virtual const char			*GetName( void ) const;
@@ -173,7 +167,7 @@ public:
 
 protected:
 	virtual void				Create( const char *pName, const char *pHelpString = 0, 
-									int flags = 0 );
+									int64 flags = 0 );
 
 	// Used internally by OneTimeInit to initialize/shutdown
 	virtual void				Init();
@@ -182,7 +176,7 @@ protected:
 	// Internal copy routine ( uses new operator from correct module )
 	char						*CopyString( const char *from );
 
-private:
+private:	
 	// Next ConVar in chain
 	// Prior to register, it points to the next convar in the DLL.
 	// Once registered, though, m_pNext is reset to point to the next
@@ -197,7 +191,7 @@ private:
 	const char 					*m_pszHelpString;
 	
 	// ConVar flags
-	int							m_nFlags;
+	int64						m_nFlags;
 
 protected:
 	// ConVars add themselves to this list for the executable. 
@@ -300,14 +294,14 @@ friend class CCvar;
 public:
 	typedef ConCommandBase BaseClass;
 
-	ConCommand( const char *pName, FnCommandCallbackV1_t callback, 
-		const char *pHelpString = 0, int flags = 0, FnCommandCompletionCallback completionFunc = 0 );
 	ConCommand( const char *pName, FnCommandCallback_t callback, 
-		const char *pHelpString = 0, int flags = 0, FnCommandCompletionCallback completionFunc = 0 );
+		const char *pHelpString = 0, int64 flags = 0, FnCommandCompletionCallback completionFunc = 0 );
+	ConCommand(const char *pName, FnCommandCallbackV1_t callback,
+		const char *pHelpString = 0, int64 flags = 0, FnCommandCompletionCallback completionFunc = 0);
+	ConCommand(const char *pName, FnCommandCallbackV2_t callback,
+		const char *pHelpString = 0, int64 flags = 0, FnCommandCompletionCallback completionFunc = 0);
 	ConCommand( const char *pName, ICommandCallback *pCallback, 
-		const char *pHelpString = 0, int flags = 0, ICommandCompletionCallback *pCommandCompletionCallback = 0 );
-	ConCommand( const char *pName, ICommandCallback2 *pCallback, 
-		const char *pHelpString = 0, int flags = 0, ICommandCompletionCallback *pCommandCompletionCallback = 0 );
+		const char *pHelpString = 0, int64 flags = 0, ICommandCompletionCallback *pCommandCompletionCallback = 0 );
 
 	virtual ~ConCommand( void );
 
@@ -329,15 +323,6 @@ private:
 	// Those fields will not exist in the version of this class that is instanced
 	// in mod code.
 
-	// Call this function when executing the command
-	union
-	{
-		FnCommandCallbackV1_t m_fnCommandCallbackV1;
-		FnCommandCallback_t m_fnCommandCallback;
-		ICommandCallback *m_pCommandCallback; 
-		ICommandCallback2 *m_pCommandCallback2; 
-	};
-
 	union
 	{
 		FnCommandCompletionCallback	m_fnCompletionCallback;
@@ -345,9 +330,28 @@ private:
 	};
 
 	bool m_bHasCompletionCallback : 1;
-	bool m_bUsingCommandCallbackInterface : 1;
-	bool m_bUsingOldCommandCallback : 1;
-	bool m_bUsingCommandCallbackInterface2 : 1;
+	bool m_bUsingCommandCompletionInterface : 1;
+	
+	struct ConCommandCB
+	{		
+		// Call this function when executing the command
+		union
+		{
+			void *m_fnCallbackAny;
+			FnCommandCallback_t m_fnCommandCallback;
+			FnCommandCallbackV1_t m_fnCommandCallbackV1;
+			FnCommandCallbackV2_t m_fnCommandCallbackV2;
+			ICommandCallback *m_pCommandCallback; 
+		};
+		
+		bool m_bUsingCommandCallbackInterface : 1;
+		bool m_bUsingOldCommandCallback : 1;
+		bool m_bUsingV1CommandCallback : 1;
+		bool m_bUsingV2CommandCallback : 1;
+	};
+	CUtlVector<ConCommandCB> m_Callbacks;
+	
+	ConCommand *m_pParent;
 };
 
 
@@ -363,21 +367,21 @@ friend class SplitScreenConVarRef;
 public:
 	typedef ConCommandBase BaseClass;
 
-								ConVar( const char *pName, const char *pDefaultValue, int flags = 0);
+								ConVar( const char *pName, const char *pDefaultValue, int64 flags = 0);
 
-								ConVar( const char *pName, const char *pDefaultValue, int flags, 
+								ConVar( const char *pName, const char *pDefaultValue, int64 flags, 
 									const char *pHelpString );
-								ConVar( const char *pName, const char *pDefaultValue, int flags, 
+								ConVar( const char *pName, const char *pDefaultValue, int64 flags, 
 									const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax );
-								ConVar( const char *pName, const char *pDefaultValue, int flags, 
+								ConVar( const char *pName, const char *pDefaultValue, int64 flags, 
 									const char *pHelpString, FnChangeCallback_t callback );
-								ConVar( const char *pName, const char *pDefaultValue, int flags, 
+								ConVar( const char *pName, const char *pDefaultValue, int64 flags, 
 									const char *pHelpString, bool bMin, float fMin, bool bMax, float fMax,
 									FnChangeCallback_t callback );
 
 	virtual						~ConVar( void );
 
-	virtual bool				IsFlagSet( int flag ) const;
+	virtual bool				IsFlagSet( int64 flag ) const;
 	virtual const char*			GetHelpText( void ) const;
 	virtual bool				IsRegistered( void ) const;
 	virtual const char			*GetName( void ) const;
@@ -385,8 +389,8 @@ public:
 	virtual const char			*GetBaseName( void ) const;
 	virtual int					GetSplitScreenPlayerSlot() const;
 
-	virtual void				AddFlags( int flags );
-	virtual int					GetFlags() const;
+	virtual void				AddFlags( int64 flags );
+	virtual int64				GetFlags() const;
 	virtual	bool				IsCommand( void ) const;
 
 	// Install a change callback (there shouldn't already be one....)
@@ -451,6 +455,9 @@ public:
 		return m_Value;
 	}
 
+	virtual float				GetFloatVirtualized( void ) const;
+	virtual int					GetIntVirtualized( void ) const;
+	virtual bool				GetBoolVirtualized( void ) const;
 private:
 	bool						InternalSetColorFromString( const char *value );
 	// Called by CCvar when the value of a var is changing.
@@ -463,7 +470,7 @@ private:
 	virtual bool				ClampValue( float& value );
 	virtual void				ChangeStringValue( const char *tempVal, float flOldValue );
 
-	virtual void				Create( const char *pName, const char *pDefaultValue, int flags = 0,
+	virtual void				Create( const char *pName, const char *pDefaultValue, int64 flags = 0,
 									const char *pHelpString = 0, bool bMin = false, float fMin = 0.0,
 									bool bMax = false, float fMax = false, FnChangeCallback_t callback = 0 );
 
@@ -636,7 +643,7 @@ public:
 
 	void Init( const char *pName, bool bIgnoreMissing );
 	bool IsValid() const;
-	bool IsFlagSet( int nFlags ) const;
+	bool IsFlagSet( int64 nFlags ) const;
 	IConVar *GetLinkedConVar();
 
 	// Get/Set value
@@ -670,7 +677,7 @@ private:
 //-----------------------------------------------------------------------------
 // Did we find an existing convar of that name?
 //-----------------------------------------------------------------------------
-FORCEINLINE_CVAR bool ConVarRef::IsFlagSet( int nFlags ) const
+FORCEINLINE_CVAR bool ConVarRef::IsFlagSet( int64 nFlags ) const
 {
 	return ( m_pConVar->IsFlagSet( nFlags ) != 0 );
 }
@@ -771,7 +778,7 @@ public:
 
 	void Init( const char *pName, bool bIgnoreMissing );
 	bool IsValid() const;
-	bool IsFlagSet( int nFlags ) const;
+	bool IsFlagSet( int64 nFlags ) const;
 
 	// Get/Set value
 	float GetFloat( int nSlot ) const;
@@ -805,7 +812,7 @@ private:
 //-----------------------------------------------------------------------------
 // Did we find an existing convar of that name?
 //-----------------------------------------------------------------------------
-FORCEINLINE_CVAR bool SplitScreenConVarRef::IsFlagSet( int nFlags ) const
+FORCEINLINE_CVAR bool SplitScreenConVarRef::IsFlagSet( int64 nFlags ) const
 {
 	return ( m_Info[ 0 ].m_pConVar->IsFlagSet( nFlags ) != 0 );
 }
@@ -887,7 +894,7 @@ FORCEINLINE_CVAR const char *SplitScreenConVarRef::GetDefault() const
 //-----------------------------------------------------------------------------
 // Called by the framework to register ConCommands with the ICVar
 //-----------------------------------------------------------------------------
-void ConVar_Register( int nCVarFlag = 0, IConCommandBaseAccessor *pAccessor = NULL );
+void ConVar_Register( int64 nCVarFlag = 0, IConCommandBaseAccessor *pAccessor = NULL );
 void ConVar_Unregister( );
 
 
@@ -913,7 +920,7 @@ class CConCommandMemberAccessor : public ConCommand, public ICommandCallback, pu
 
 public:
 	CConCommandMemberAccessor( T* pOwner, const char *pName, FnMemberCommandCallback_t callback, const char *pHelpString = 0,
-		int flags = 0, FnMemberCommandCompletionCallback_t completionFunc = 0 ) :
+		int64 flags = 0, FnMemberCommandCompletionCallback_t completionFunc = 0 ) :
 		BaseClass( pName, this, pHelpString, flags, ( completionFunc != 0 ) ? this : NULL )
 	{
 		m_pOwner = pOwner;
@@ -957,9 +964,9 @@ private:
 // Purpose: Utility macros to quicky generate a simple console command
 //-----------------------------------------------------------------------------
 #define CON_COMMAND( name, description ) \
-   static void name( const CCommandContext &context, const CCommand &args ); \
+   static void name( const CCommand &args ); \
    static ConCommand name##_command( #name, name, description ); \
-   static void name( const CCommandContext &context, const CCommand &args )
+   static void name( const CCommand &args )
 
 #ifdef CLIENT_DLL
 	#define CON_COMMAND_SHARED( name, description ) \

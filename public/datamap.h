@@ -59,7 +59,7 @@ typedef enum _fieldtypes
 
 	FIELD_INTERVAL,			// a start and range floating point interval ( e.g., 3.2->3.6 == 3.2 and 0.4 )
 	FIELD_UNUSED,
-	
+
 	FIELD_VECTOR2D,			// 2 floats
 	FIELD_INTEGER64,		// 64bit integer
 
@@ -67,11 +67,34 @@ typedef enum _fieldtypes
 
 	FIELD_RESOURCE,
 
-	FIELD_TYPECOUNT,		// This is where script variant field types start. Formerly last.
+	FIELD_TYPEUNKNOWN,
+
+	FIELD_CSTRING,
+	FIELD_HSCRIPT,
+	FIELD_VARIANT,
+	FIELD_UINT64,
+	FIELD_FLOAT64,
+	FIELD_POSITIVEINTEGER_OR_NULL,
+	FIELD_HSCRIPT_NEW_INSTANCE,
+	FIELD_UINT,
+	FIELD_UTLSTRINGTOKEN,
+	FIELD_QANGLE,
+	FIELD_NETWORK_ORIGIN_CELL_QUANTIZED_VECTOR,
+	FIELD_HMATERIAL,
+	FIELD_HMODEL,
+	FIELD_NETWORK_QUANTIZED_VECTOR,
+	FIELD_NETWORK_QUANTIZED_FLOAT,
+	FIELD_DIRECTION_VECTOR_WORLDSPACE,
+	FIELD_QANGLE_WORLDSPACE,
+	FIELD_QUATERNION_WORLDSPACE,
+	FIELD_HSCRIPT_LIGHTBINDING,
+	FIELD_V8_VALUE,
+	FIELD_V8_OBJECT,
+	FIELD_V8_ARRAY,
+	FIELD_V8_CALLBACK_INFO,
+	FIELD_UTLSTRING,
 	
-	FIELD_MODELNAME = 45,		// Engine string that is a model name (needs precache)
-	FIELD_MODELINDEX,		// a model index
-	FIELD_MATERIALINDEX,	// a material index (using the material precache string table)
+	FIELD_TYPECOUNT
 } fieldtype_t;
 
 
@@ -122,7 +145,6 @@ DECLARE_FIELD_SIZE( FIELD_VMATRIX,		16 * sizeof(float))
 DECLARE_FIELD_SIZE( FIELD_VMATRIX_WORLDSPACE,	16 * sizeof(float))
 DECLARE_FIELD_SIZE( FIELD_MATRIX3X4_WORLDSPACE,	12 * sizeof(float))
 DECLARE_FIELD_SIZE( FIELD_INTERVAL,		2 * sizeof( float) )  // NOTE:  Must match interval.h definition
-DECLARE_FIELD_SIZE( FIELD_MATERIALINDEX,	sizeof(int) )
 
 
 #define ARRAYSIZE2D(p)		(sizeof(p)/sizeof(p[0][0]))

@@ -11,6 +11,8 @@
 
 #ifdef COMPILER_MSVC
 #pragma once
+#define WIN32_LEAN_AND_MEAN
+#include <Windows.h>
 #endif
 
 #if defined( _X360 )
@@ -701,7 +703,11 @@ typedef unsigned int		uint;
 // Returns true if debugger attached, false otherwise
 //-----------------------------------------------------------------------------
 #if defined( PLATFORM_WINDOWS ) || defined( PLATFORM_LINUX ) || defined( PLATFORM_OSX )
-PLATFORM_INTERFACE bool Plat_IsInDebugSession();
+PLATFORM_INTERFACE bool Plat_IsInDebugSessionRaw();
+inline bool Plat_IsInDebugSession()
+{
+	return Plat_IsInDebugSessionRaw();
+}
 PLATFORM_INTERFACE void Plat_DebugString( const tchar * );
 #else
 inline bool Plat_IsInDebugSession() { return false; }
@@ -1637,7 +1643,6 @@ FORCEINLINE uint64 RotateBitsRight64( uint64 nValue, int nRotateBits )
 	return ( nValue >> nRotateBits ) | ( nValue << ( ( - nRotateBits ) & 63 ) );
 }
 #endif
-
 
 #include "tier0/valve_on.h"
 

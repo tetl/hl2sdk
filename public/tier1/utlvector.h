@@ -160,21 +160,9 @@ protected:
 	void ShiftElementsRight( int elem, int num = 1 );
 	void ShiftElementsLeft( int elem, int num = 1 );
 
-	CAllocator m_Memory;
 	int m_Size;
+	CAllocator m_Memory;
 
-#ifndef _X360
-	// For easier access to the elements through the debugger
-	// it's in release builds so this can be used in libraries correctly
-	T *m_pElements;
-
-	inline void ResetDbgInfo()
-	{
-		m_pElements = Base();
-	}
-#else
-	inline void ResetDbgInfo() {}
-#endif
 };
 
 
@@ -529,16 +517,14 @@ public:
 //-----------------------------------------------------------------------------
 template< typename T, class A >
 inline CUtlVector<T, A>::CUtlVector( int growSize, int initSize )	: 
-	m_Memory(growSize, initSize), m_Size(0)
+	m_Size(0), m_Memory(growSize, initSize)
 {
-	ResetDbgInfo();
 }
 
 template< typename T, class A >
 inline CUtlVector<T, A>::CUtlVector( T* pMemory, int allocationCount, int numElements )	: 
-	m_Memory(pMemory, allocationCount), m_Size(numElements)
+	m_Size(numElements), m_Memory(pMemory, allocationCount)
 {
-	ResetDbgInfo();
 }
 
 template< typename T, class A >
@@ -663,7 +649,6 @@ void CUtlVector<T, A>::GrowVector( int num )
 	}
 
 	m_Size += num;
-	ResetDbgInfo();
 }
 
 
@@ -710,7 +695,6 @@ void CUtlVector<T, A>::EnsureCapacity( int num )
 {
 	MEM_ALLOC_CREDIT_CLASS();
 	m_Memory.EnsureCapacity(num);
-	ResetDbgInfo();
 }
 
 
@@ -902,9 +886,6 @@ void CUtlVector<T, A>::Swap( CUtlVector< T, A > &vec )
 {
 	m_Memory.Swap( vec.m_Memory );
 	V_swap( m_Size, vec.m_Size );
-#ifndef _X360
-	V_swap( m_pElements, vec.m_pElements );
-#endif
 }
 
 template< typename T, class A >
@@ -1116,7 +1097,6 @@ inline void CUtlVector<T, A>::Purge()
 {
 	RemoveAll();
 	m_Memory.Purge();
-	ResetDbgInfo();
 }
 
 
